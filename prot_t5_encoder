@@ -1,0 +1,42 @@
+import torch
+from transformers import T5EncoderModel, T5Tokenizer
+import numpy as np
+import re
+
+#Load model into GPU and switch to inference mode
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+#Load Vocabulary and ProtT5-XL-UniRef50 Model
+tokenizer = T5Tokenizer.from_pretrained("Rostlab/prot_t5_xl_uniref50", do_lower_case=False )
+model = T5EncoderModel.from_pretrained("Rostlab/prot_t5_xl_uniref50")
+sequence_examples = ["PRTEINO", "SEQWENCE"]
+# this will replace all rare/ambiguous amino acids by X and introduce white-space between all amino acids
+sequence_examples = [" ".join(list(re.sub(r"[UZOB]", "X", sequence))) for sequence in sequence_examples]
+
+# tokenize sequences and pad up to the longest sequence in the batch
+ids = tokenizer.batch_encode_plus(sequence_examples, add_special_tokens=True, padding="longest")
+input_ids = torch.tensor(ids['input_ids']).to(device)
+attention_mask = torch.tensor(ids['attention_mask']).to(device)
+
+# generate embeddings
+with torch.no_grad():
+    embedding_repr = model(input_ids=input_ids,attention_mask=attention_mask)
+
+emb = []
+# extract embeddings for the first ([0,:]) sequence in the batch while removing padded & special tokens ([0,:7])
+emb_0 = embedding_repr.last_hidden_state
+print(f"Shape of per-residue embedding of first sequences: {emb_0.shape}")
+
+emb.append(emb_0.numpy())
+
+# do the same for the second ([1,:]) sequence in the batch while taking into account different sequence lengths ([1,:8])
+emb_1 = embedding_repr.last_hidden_state
+
+emb.append(emb_1.numpy())
+
+# if you want to derive a single representation (per-protein embedding) for the whole protein
+emb_0_per_protein = emb_0.mean(dim=0) # shape (1024)
+
+print(f"Shape of per-protein embedding of first sequences: {emb_0_per_protein.shape}")
+
+np.save('emb.npy', emb)
