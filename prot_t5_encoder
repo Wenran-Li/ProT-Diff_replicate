@@ -26,6 +26,6 @@ with torch.no_grad():
 emb_0 = embedding_repr.last_hidden_state
 print(f"Shape of per-residue embedding of first sequences: {emb_0.shape}")
 
-emb = emb_0.numpy
+emb = emb_0.numpy()
 
 np.save('emb.npy', emb)
